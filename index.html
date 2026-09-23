@@ -133,6 +133,47 @@
       aside, .editor { border: 0; border-top: 1px solid var(--line); max-height: 34vh; }
       .brand { font-size: 20px; }
     }
+    /* ---- 手机端：全屏地图 + 底部抽屉面板 ---- */
+    .mobile-fab, .sheet-backdrop { display: none; }
+    @media (max-width: 700px) {
+      #app { grid-template-rows: 44px 1fr; }
+      header { height: 44px; padding: 0 8px; flex-wrap: nowrap; }
+      .brand { font-size: 17px; white-space: nowrap; }
+      .bar { flex-wrap: nowrap; overflow-x: auto; gap: 5px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+      .bar::-webkit-scrollbar { display: none; }
+      .chip, .go { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+      main { display: block; position: relative; height: calc(100vh - 44px); height: calc(100dvh - 44px); }
+      #stage { height: 100%; }
+      #stage .legend { display: none; }
+      .coords { bottom: 70px; font-size: 11px; }
+      aside, .editor {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 42;
+        width: 100%; max-height: 55dvh; padding: 14px;
+        border-radius: 16px 16px 0 0; border: 1px solid var(--line); border-bottom: 0;
+        box-shadow: 0 -10px 40px rgba(0,0,0,0.55);
+        display: none;
+      }
+      aside.open, .editor.open { display: block; }
+      .sheet-backdrop {
+        position: fixed; inset: 0; z-index: 41; background: rgba(0,0,0,0.5);
+        display: none;
+      }
+      .sheet-backdrop.show { display: block; }
+      .mobile-fab {
+        position: fixed; bottom: 18px; z-index: 43; display: inline-flex;
+        align-items: center; gap: 6px;
+        border-radius: 999px; padding: 10px 16px; font-size: 13px; font-weight: 600;
+        border: 1px solid var(--line); background: rgba(16,18,28,0.92);
+        color: var(--text); box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+      }
+      .mobile-fab.active { color: #1a1208; background: var(--gold); border-color: var(--gold); }
+      #fabList { right: 16px; }
+      #fabEdit { right: 100px; }
+    }
+    @media (min-width: 701px) {
+      .mobile-fab, .sheet-backdrop { display: none !important; }
+      aside, .editor { display: block !important; }
+    }
   </style>
 </head>
 <body>
@@ -216,6 +257,9 @@
         <p class="err" id="error"></p>
       </section>
     </main>
+    <button class="mobile-fab" id="fabList" type="button">列表</button>
+    <button class="mobile-fab" id="fabEdit" type="button">编辑</button>
+    <div class="sheet-backdrop" id="sheetBackdrop"></div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
@@ -1055,6 +1099,7 @@
           flyTo(c.lat, c.lng, 1.12);
         }
         refreshAll();
+        if (isMobile()) setSheet("editor", true);
         return;
       }
       if (f && (isChinaWorld(f) || regionsOf(f).length)) {
@@ -1063,6 +1108,7 @@
           state.selectedId = null;
           state.selectedMarkerId = null;
           $("coords").textContent = "已收起行政区，恢复国家轮廓";
+          if (isMobile()) closeSheets();
         } else {
           state.expandedKey = keyOf(f);
           state.selectedId = null;
@@ -1073,6 +1119,7 @@
             const c = centroid(f);
             flyTo(c.lat, c.lng, isChinaWorld(f) ? 1.28 : flyAltitudeFor(f));
           }
+          if (isMobile()) setSheet("list", true);
         }
         refreshAll();
         return;
@@ -1084,6 +1131,7 @@
         flyTo(c.lat, c.lng, 1.65);
       }
       refreshAll();
+      if (isMobile()) setSheet("editor", true);
     }
 
     function selectMarker(id) {
@@ -1092,6 +1140,7 @@
       const m = state.edits.markers.find((x) => x.id === id);
       if (m && state.view === "globe") flyTo(m.lat, m.lng, 1.4);
       refreshAll();
+      if (isMobile()) setSheet("editor", true);
     }
 
     function addMarker(lat, lng) {
@@ -1123,6 +1172,28 @@
       $("modePin").classList.toggle("active", mode === "pin");
       $("coords").textContent = mode === "pin" ? "点击地图放置标记" : "拖拽旋转 · 滚轮缩放 · 点击国家或行政区可编辑";
       renderEditor();
+    }
+
+    // ---- 手机端底部抽屉面板 ----
+    function isMobile() { return window.matchMedia("(max-width: 700px)").matches; }
+    function setSheet(kind, open) {
+      document.querySelector("aside").classList.toggle("open", kind === "list" && open);
+      document.querySelector(".editor").classList.toggle("open", kind === "editor" && open);
+      $("fabList").classList.toggle("active", kind === "list" && open);
+      $("fabEdit").classList.toggle("active", kind === "editor" && open);
+      $("sheetBackdrop").classList.toggle("show", open);
+    }
+    function closeSheets() {
+      document.querySelector("aside").classList.remove("open");
+      document.querySelector(".editor").classList.remove("open");
+      $("fabList").classList.remove("active");
+      $("fabEdit").classList.remove("active");
+      $("sheetBackdrop").classList.remove("show");
+    }
+    function toggleSheet(kind) {
+      const el = document.querySelector(kind === "list" ? "aside" : ".editor");
+      if (el.classList.contains("open")) closeSheets();
+      else setSheet(kind, true);
     }
 
     function resizeGlobe() {
@@ -1197,11 +1268,15 @@
     });
     $("viewGlobe").addEventListener("click", () => setView("globe"));
     $("viewFlat").addEventListener("click", () => setView("flat"));
+    $("fabList").addEventListener("click", () => toggleSheet("list"));
+    $("fabEdit").addEventListener("click", () => toggleSheet("editor"));
+    $("sheetBackdrop").addEventListener("click", closeSheets);
     $("collapseBtn").addEventListener("click", () => {
       state.expandedKey = null;
       state.selectedId = null;
       state.selectedMarkerId = null;
       refreshAll();
+      if (isMobile()) closeSheets();
     });
     $("modeSelect").addEventListener("click", () => setMode("select"));
     $("modePin").addEventListener("click", () => setMode("pin"));
@@ -1254,12 +1329,14 @@
     window.addEventListener("resize", () => {
       resizeGlobe();
       if (state.view === "flat") setupFlat();
+      if (!isMobile()) closeSheets();
     });
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape") {
         state.selectedId = null;
         state.selectedMarkerId = null;
         refreshAll();
+        closeSheets();
       }
       if ((ev.key === "Delete" || ev.key === "Backspace") && state.selectedMarkerId && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
         $("deleteMarker").click();

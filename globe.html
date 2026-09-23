@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>可编辑世界地图</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23e4b56a'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #07080d;
+      --panel: rgba(16, 18, 28, 0.86);
+      --line: rgba(180, 210, 255, 0.14);
+      --gold: #e4b56a;
+      --gold-2: #f3d7a0;
+      --text: #eef3ff;
+      --muted: #9aa8c2;
+      --danger: #ff8a7a;
+      --ok: #8fd9a8;
+      --accent: #7ec8ff;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: "Noto Sans SC", sans-serif; }
+    body { overflow: hidden; }
+    a { color: var(--gold); }
+    button, input, select, textarea { font-family: inherit; }
+    #app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+    header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 16px; border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(20,24,40,0.95), rgba(8,10,16,0.88));
+      z-index: 5;
+    }
+    .brand { font-family: "Instrument Serif", serif; font-size: 26px; margin: 0; letter-spacing: -0.03em; }
+    .brand span { color: var(--gold); font-style: italic; }
+    .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .chip, .go {
+      border-radius: 999px; padding: 7px 12px; cursor: pointer; font-size: 13px;
+      border: 1px solid var(--line); background: transparent; color: var(--muted);
+      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .chip.active, .chip:hover { color: #1a1208; background: var(--gold); border-color: var(--gold); }
+    .go { background: var(--gold); color: #1a1208; border: 0; font-weight: 700; }
+    .go.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
+    .go.danger { background: transparent; color: var(--danger); border: 1px solid rgba(255,138,122,0.35); }
+    main { display: grid; grid-template-columns: 280px minmax(0, 1fr) 320px; min-height: 0; }
+    aside, .editor {
+      background: var(--panel); border-right: 1px solid var(--line);
+      padding: 14px; overflow: auto; backdrop-filter: blur(16px);
+    }
+    .editor { border-right: 0; border-left: 1px solid var(--line); }
+    h2 { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 6px; }
+    input[type="text"], input[type="search"], textarea, select {
+      width: 100%; background: #0c1018; color: var(--text); border: 1px solid var(--line);
+      border-radius: 10px; padding: 9px 11px; outline: none;
+    }
+    textarea { min-height: 88px; resize: vertical; line-height: 1.55; }
+    .list { display: grid; gap: 4px; }
+    .list button, .marker-item {
+      text-align: left; width: 100%; background: #0c1018; color: var(--text);
+      border: 1px solid transparent; border-radius: 10px; padding: 8px 10px; cursor: pointer;
+    }
+    .list button:hover, .list button.active, .marker-item.active { border-color: var(--gold); background: rgba(228,181,106,0.1); }
+    .list small, .hint { color: var(--muted); font-size: 12px; }
+    .swatch { width: 14px; height: 14px; border-radius: 50%; display: inline-block; vertical-align: middle; margin-right: 8px; border: 1px solid rgba(255,255,255,0.2); }
+    #stage { position: relative; min-width: 0; background:
+      radial-gradient(circle at 50% 45%, #14203a 0%, #07080d 62%);
+    }
+    #globe, #flat { position: absolute; inset: 0; }
+    #flat { display: none; overflow: hidden; }
+    #flat svg { width: 100%; height: 100%; display: block; }
+    #flat path { stroke: rgba(243,215,160,0.28); stroke-width: 0.4; cursor: pointer; }
+    #flat path.selected { stroke: var(--gold-2); stroke-width: 1.4; }
+    #flat path.polar-line {
+      fill: none; stroke: #8ee3ff; stroke-width: 1.25; stroke-dasharray: 6 5;
+      cursor: default; pointer-events: none;
+    }
+    #flat .polar-tag { fill: #b7f0ff; font-size: 11px; font-weight: 600; pointer-events: none; }
+    #flat .polar-dot { fill: #fff; stroke: #8ee3ff; stroke-width: 2; pointer-events: none; }
+    #flat .ocean-tag { fill: #8ecfff; font-size: 15px; font-weight: 700; letter-spacing: 0.28em; pointer-events: none; }
+    #flat .ocean-sub { fill: #8ecfff; font-size: 10px; font-weight: 500; letter-spacing: 0.04em; opacity: 0.75; pointer-events: none; }
+    #tooltip {
+      position: absolute; pointer-events: none; z-index: 4; display: none;
+      background: rgba(8,10,16,0.92); border: 1px solid var(--line); color: var(--text);
+      padding: 6px 10px; border-radius: 8px; font-size: 12px; transform: translate(12px, 12px);
+    }
+    .coords { position: absolute; left: 14px; bottom: 14px; z-index: 3; color: var(--muted); font-size: 12px; }
+    .legend {
+      position: absolute; right: 14px; bottom: 14px; z-index: 3; color: var(--muted); font-size: 12px;
+      background: rgba(8,10,16,0.72); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+    }
+    .colors { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .colors button { width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); cursor: pointer; padding: 0; }
+    .row2 { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+    .pin { display: flex; flex-direction: column; align-items: center; transform: translateY(-8px); cursor: pointer; pointer-events: auto; }
+    .country-float {
+      pointer-events: none; color: #f3d7a0; font-size: 13px; font-weight: 600;
+      text-shadow: 0 1px 8px #000, 0 0 12px rgba(0,0,0,0.8); white-space: nowrap;
+      transform: translateY(-16px);
+    }
+    .polar-float {
+      pointer-events: none; display: flex; flex-direction: column; align-items: center;
+      color: #b7f0ff; font-size: 12px; font-weight: 700; letter-spacing: 0.12em;
+      text-shadow: 0 1px 8px #000, 0 0 14px rgba(0,40,80,0.9); white-space: nowrap;
+      transform: translateY(-12px);
+    }
+    .polar-float small { font-size: 10px; font-weight: 500; letter-spacing: 0; opacity: 0.85; margin-top: 2px; }
+    .polar-pole-dot {
+      width: 9px; height: 9px; border-radius: 50%; background: #fff; margin-bottom: 5px;
+      box-shadow: 0 0 0 4px rgba(142,227,255,0.35), 0 0 16px rgba(142,227,255,0.7);
+    }
+    .ocean-float {
+      pointer-events: none; display: flex; flex-direction: column; align-items: center;
+      color: #8ecfff; font-size: 16px; font-weight: 700; letter-spacing: 0.38em;
+      text-shadow: 0 1px 10px #000, 0 0 18px rgba(10,50,110,0.95); white-space: nowrap;
+    }
+    .ocean-float small { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; opacity: 0.72; margin-top: 3px; }
+    .pin-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px rgba(228,181,106,0.25), 0 8px 18px rgba(0,0,0,0.45); }
+    .pin.active .pin-dot { background: #fff; box-shadow: 0 0 0 5px rgba(255,255,255,0.25); }
+    .pin-label { margin-top: 4px; font-size: 11px; color: var(--gold-2); text-shadow: 0 1px 4px #000; white-space: nowrap; }
+    .loading {
+      position: absolute; inset: 0; display: grid; place-items: center; z-index: 6;
+      background: rgba(7,8,13,0.72); color: var(--gold-2); font-family: "Instrument Serif", serif; font-size: 28px;
+    }
+    .err { color: var(--danger); font-size: 13px; }
+    .marker-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .marker-item b { font-weight: 500; }
+    @media (max-width: 1080px) {
+      main { grid-template-columns: 1fr; grid-template-rows: 42vh auto auto; }
+      aside, .editor { border: 0; border-top: 1px solid var(--line); max-height: 34vh; }
+      .brand { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1 class="brand">世界 <span>地图</span></h1>
+      <div class="bar">
+        <button class="chip active" id="viewGlobe" type="button">球形</button>
+        <button class="chip" id="viewFlat" type="button">平面</button>
+        <button class="chip" id="toggleSpin" type="button">自转</button>
+        <select id="texture" title="地球贴图">
+          <option value="political">政治地图</option>
+          <option value="marble">卫星</option>
+          <option value="night">夜景</option>
+        </select>
+        <button class="chip" id="modeSelect" type="button">选择</button>
+        <button class="chip" id="modePin" type="button">钉标记</button>
+        <button class="go ghost" id="exportBtn" type="button">导出</button>
+        <button class="go ghost" id="importBtn" type="button">导入</button>
+        <input id="importFile" type="file" accept="application/json" hidden />
+        <a class="chip" href="./使用说明.txt">使用说明</a>
+      </div>
+    </header>
+    <main>
+      <aside>
+        <h2>极地</h2>
+        <div class="list" id="polarList"></div>
+        <h2 style="margin-top:16px">大洋</h2>
+        <div class="list" id="oceanList"></div>
+        <h2 style="margin-top:16px">国家</h2>
+        <input type="search" id="search" placeholder="搜索国家 / 省份" />
+        <p class="hint" id="countHint" style="margin:8px 0 10px"></p>
+        <div class="list" id="countryList"></div>
+        <h2 style="margin-top:18px">中国省份</h2>
+        <p class="hint" id="provinceHint" style="margin:8px 0 10px"></p>
+        <div class="list" id="provinceList"></div>
+        <h2 style="margin-top:18px">标记</h2>
+        <div class="list" id="markerList"></div>
+      </aside>
+      <div id="stage">
+        <div id="globe"></div>
+        <div id="flat"></div>
+        <div id="tooltip"></div>
+        <div class="coords" id="coords">拖拽旋转 · 滚轮缩放 · 点击国家或省份可编辑</div>
+        <div class="legend">中国省级行政区 · 四大洋 · 极圈 · 编辑保存在本机</div>
+        <div class="loading" id="loading">正在展开地球…</div>
+      </div>
+      <section class="editor">
+        <h2>编辑</h2>
+        <p class="hint" id="editHint">点击地球上的国家或中国省份，或左侧列表，开始上色和改名。</p>
+        <div id="countryEdit" hidden>
+          <label>显示名称</label>
+          <input type="text" id="editName" />
+          <label>填充颜色</label>
+          <div class="row2">
+            <input type="color" id="editColor" value="#4a6741" style="width:100%;height:38px;padding:0;border:0;background:transparent;cursor:pointer" />
+            <button class="go ghost" id="resetCountry" type="button">恢复默认</button>
+          </div>
+          <div class="colors" id="presets"></div>
+          <label>备注</label>
+          <textarea id="editNote" placeholder="例如：人口、首都、剧情设定、拍摄地点…"></textarea>
+        </div>
+        <div id="markerEdit" hidden>
+          <label>标记标题</label>
+          <input type="text" id="markerTitle" />
+          <label>备注</label>
+          <textarea id="markerNote" placeholder="这个点代表什么"></textarea>
+          <label>颜色</label>
+          <input type="color" id="markerColor" value="#e4b56a" style="width:100%;height:38px;padding:0;border:0;background:transparent;cursor:pointer" />
+          <div class="bar" style="margin-top:12px">
+            <button class="go danger" id="deleteMarker" type="button">删除标记</button>
+          </div>
+        </div>
+        <div class="bar" style="margin-top:16px">
+          <button class="go ghost" id="randomColors" type="button">随机配色</button>
+          <button class="go danger" id="resetAll" type="button">清空编辑</button>
+        </div>
+        <p class="err" id="error"></p>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4/dist/globe.gl.min.js"></script>
+  <script>
+    const STORE_KEY = "editable-world-globe-v1";
+    const IMG = {
+      political: "https://cdn.jsdelivr.net/npm/three-globe@2.44.1/example/img/earth-dark.jpg",
+      marble: "https://cdn.jsdelivr.net/npm/three-globe@2.44.1/example/img/earth-blue-marble.jpg",
+      night: "https://cdn.jsdelivr.net/npm/three-globe@2.44.1/example/img/earth-night.jpg",
+      stars: "https://cdn.jsdelivr.net/npm/three-globe@2.44.1/example/img/night-sky.png",
+    };
+    const TOPO_URLS = [
+      "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json",
+      "https://unpkg.com/world-atlas@2.0.2/countries-110m.json",
+    ];
+    const CHINA_GEO_URLS = [
+      "./china-provinces.json",
+      "/static/china-provinces.json",
+      "https://cdn.jsdelivr.net/gh/longwosion/geojson-map-china@master/china.json",
+    ];
+    const CN_EN = {
+      "北京市": "Beijing", "天津市": "Tianjin", "上海市": "Shanghai", "重庆市": "Chongqing",
+      "河北省": "Hebei", "山西省": "Shanxi", "辽宁省": "Liaoning", "吉林省": "Jilin",
+      "黑龙江省": "Heilongjiang", "江苏省": "Jiangsu", "浙江省": "Zhejiang", "安徽省": "Anhui",
+      "福建省": "Fujian", "江西省": "Jiangxi", "山东省": "Shandong", "河南省": "Henan",
+      "湖北省": "Hubei", "湖南省": "Hunan", "广东省": "Guangdong", "海南省": "Hainan",
+      "四川省": "Sichuan", "贵州省": "Guizhou", "云南省": "Yunnan", "陕西省": "Shaanxi",
+      "甘肃省": "Gansu", "青海省": "Qinghai", "台湾省": "Taiwan",
+      "内蒙古自治区": "Inner Mongolia", "广西壮族自治区": "Guangxi",
+      "西藏自治区": "Tibet", "宁夏回族自治区": "Ningxia",
+      "新疆维吾尔自治区": "Xinjiang",
+      "香港特别行政区": "Hong Kong", "澳门特别行政区": "Macao",
+    };
+    const PRESETS = ["#c23b22", "#d9762c", "#e4b56a", "#6aa84f", "#3d9b8f", "#4a90c8", "#6b5ea8", "#8a6a58", "#d0d6e0", "#1f2430"];
+    const TONES = ["#2f4a3c", "#3d5c47", "#4a6b52", "#5a6340", "#6b5e3a", "#4a5560", "#3d4a58", "#5c4a42", "#4a5c4e", "#3a4f4a", "#5a5344", "#445056", "#3e4d3a", "#4d5a48"];
+    const POLAR_CIRCLE_LAT = 66.5639;
+    const POLAR_MARKS = [
+      { id: "arctic-circle", kind: "polar", lat: POLAR_CIRCLE_LAT, lng: 20, title: "北极圈", sub: "66.56°N", view: { lat: POLAR_CIRCLE_LAT, lng: 20, altitude: 1.85 } },
+      { id: "north-pole", kind: "polar-pole", lat: 89.4, lng: 0, title: "北极", sub: "90°N", view: { lat: 88, lng: 0, altitude: 1.7 } },
+      { id: "antarctic-circle", kind: "polar", lat: -POLAR_CIRCLE_LAT, lng: 20, title: "南极圈", sub: "66.56°S", view: { lat: -POLAR_CIRCLE_LAT, lng: 20, altitude: 1.85 } },
+      { id: "south-pole", kind: "polar-pole", lat: -89.4, lng: 0, title: "南极", sub: "90°S", view: { lat: -88, lng: 0, altitude: 1.7 } },
+    ];
+    const OCEAN_MARKS = [
+      { id: "pacific", kind: "ocean", lat: 8, lng: 165, title: "太平洋", sub: "Pacific Ocean", view: { lat: 8, lng: 165, altitude: 2.15 } },
+      { id: "pacific-east", kind: "ocean", lat: 0, lng: -130, title: "太平洋", sub: "Pacific Ocean", view: { lat: 0, lng: -130, altitude: 2.15 }, silent: true },
+      { id: "atlantic", kind: "ocean", lat: 8, lng: -28, title: "大西洋", sub: "Atlantic Ocean", view: { lat: 8, lng: -28, altitude: 2.1 } },
+      { id: "indian", kind: "ocean", lat: -20, lng: 78, title: "印度洋", sub: "Indian Ocean", view: { lat: -20, lng: 78, altitude: 2.1 } },
+      { id: "arctic-ocean", kind: "ocean", lat: 80, lng: 50, title: "北冰洋", sub: "Arctic Ocean", view: { lat: 80, lng: 50, altitude: 1.75 } },
+    ];
+    const ZH = {
+      "Afghanistan": "阿富汗", "Albania": "阿尔巴尼亚", "Algeria": "阿尔及利亚", "Angola": "安哥拉",
+      "Antarctica": "南极洲", "Argentina": "阿根廷", "Armenia": "亚美尼亚", "Australia": "澳大利亚",
+      "Austria": "奥地利", "Azerbaijan": "阿塞拜疆", "Bahamas": "巴哈马", "Bangladesh": "孟加拉国",
+      "Belarus": "白俄罗斯", "Belgium": "比利时", "Belize": "伯利兹", "Benin": "贝宁", "Bhutan": "不丹",
+      "Bolivia": "玻利维亚", "Bosnia and Herz.": "波黑", "Botswana": "博茨瓦纳", "Brazil": "巴西",
+      "Brunei": "文莱", "Bulgaria": "保加利亚", "Burkina Faso": "布基纳法索", "Burundi": "布隆迪",
+      "Cambodia": "柬埔寨", "Cameroon": "喀麦隆", "Canada": "加拿大", "Central African Rep.": "中非",
+      "Chad": "乍得", "Chile": "智利", "China": "中国", "Colombia": "哥伦比亚", "Congo": "刚果（布）",
+      "Costa Rica": "哥斯达黎加", "Côte d'Ivoire": "科特迪瓦", "Croatia": "克罗地亚", "Cuba": "古巴",
+      "Cyprus": "塞浦路斯", "Czechia": "捷克", "Dem. Rep. Congo": "刚果（金）", "Denmark": "丹麦",
+      "Djibouti": "吉布提", "Dominican Rep.": "多米尼加", "Ecuador": "厄瓜多尔", "Egypt": "埃及",
+      "El Salvador": "萨尔瓦多", "Eq. Guinea": "赤道几内亚", "Eritrea": "厄立特里亚", "Estonia": "爱沙尼亚",
+      "eSwatini": "斯威士兰", "Ethiopia": "埃塞俄比亚", "Falkland Is.": "福克兰群岛", "Fiji": "斐济",
+      "Finland": "芬兰", "Fr. S. Antarctic Lands": "法属南部领地", "France": "法国", "Gabon": "加蓬",
+      "Gambia": "冈比亚", "Georgia": "格鲁吉亚", "Germany": "德国", "Ghana": "加纳", "Greece": "希腊",
+      "Greenland": "格陵兰", "Guatemala": "危地马拉", "Guinea": "几内亚", "Guinea-Bissau": "几内亚比绍",
+      "Guyana": "圭亚那", "Haiti": "海地", "Honduras": "洪都拉斯", "Hungary": "匈牙利", "Iceland": "冰岛",
+      "India": "印度", "Indonesia": "印度尼西亚", "Iran": "伊朗", "Iraq": "伊拉克", "Ireland": "爱尔兰",
+      "Israel": "以色列", "Italy": "意大利", "Jamaica": "牙买加", "Japan": "日本", "Jordan": "约旦",
+      "Kazakhstan": "哈萨克斯坦", "Kenya": "肯尼亚", "Kosovo": "科索沃", "Kuwait": "科威特",
+      "Kyrgyzstan": "吉尔吉斯斯坦", "Laos": "老挝", "Latvia": "拉脱维亚", "Lebanon": "黎巴嫩",
+      "Lesotho": "莱索托", "Liberia": "利比里亚", "Libya": "利比亚", "Lithuania": "立陶宛",
+      "Luxembourg": "卢森堡", "Madagascar": "马达加斯加", "Malawi": "马拉维", "Malaysia": "马来西亚",
+      "Mali": "马里", "Mauritania": "毛里塔尼亚", "Mexico": "墨西哥", "Moldova": "摩尔多瓦",
+      "Mongolia": "蒙古", "Montenegro": "黑山", "Morocco": "摩洛哥", "Mozambique": "莫桑比克",
+      "Myanmar": "缅甸", "N. Cyprus": "北塞浦路斯", "Namibia": "纳米比亚", "Nepal": "尼泊尔",
+      "Netherlands": "荷兰", "New Caledonia": "新喀里多尼亚", "New Zealand": "新西兰", "Nicaragua": "尼加拉瓜",
+      "Niger": "尼日尔", "Nigeria": "尼日利亚", "North Korea": "朝鲜", "North Macedonia": "北马其顿",
+      "Norway": "挪威", "Oman": "阿曼", "Pakistan": "巴基斯坦", "Palestine": "巴勒斯坦", "Panama": "巴拿马",
+      "Papua New Guinea": "巴布亚新几内亚", "Paraguay": "巴拉圭", "Peru": "秘鲁", "Philippines": "菲律宾",
+      "Poland": "波兰", "Portugal": "葡萄牙", "Puerto Rico": "波多黎各", "Qatar": "卡塔尔",
+      "Romania": "罗马尼亚", "Russia": "俄罗斯", "Rwanda": "卢旺达", "S. Sudan": "南苏丹",
+      "Saudi Arabia": "沙特阿拉伯", "Senegal": "塞内加尔", "Serbia": "塞尔维亚", "Sierra Leone": "塞拉利昂",
+      "Slovakia": "斯洛伐克", "Slovenia": "斯洛文尼亚", "Solomon Is.": "所罗门群岛", "Somalia": "索马里",
+      "Somaliland": "索马里兰", "South Africa": "南非", "South Korea": "韩国", "Spain": "西班牙",
+      "Sri Lanka": "斯里兰卡", "Sudan": "苏丹", "Suriname": "苏里南", "Sweden": "瑞典", "Switzerland": "瑞士",
+      "Syria": "叙利亚", "Taiwan": "台湾", "Tajikistan": "塔吉克斯坦", "Tanzania": "坦桑尼亚",
+      "Thailand": "泰国", "Timor-Leste": "东帝汶", "Togo": "多哥", "Trinidad and Tobago": "特立尼达和多巴哥",
+      "Tunisia": "突尼斯", "Turkey": "土耳其", "Turkmenistan": "土库曼斯坦", "Uganda": "乌干达",
+      "Ukraine": "乌克兰", "United Arab Emirates": "阿联酋", "United Kingdom": "英国",
+      "United States of America": "美国", "Uruguay": "乌拉圭", "Uzbekistan": "乌兹别克斯坦",
+      "Vanuatu": "瓦努阿图", "Venezuela": "委内瑞拉", "Vietnam": "越南", "W. Sahara": "西撒哈拉",
+      "Yemen": "也门", "Zambia": "赞比亚", "Zimbabwe": "津巴布韦"
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      countries: [],
+      provinces: [],
+      edits: { countries: {}, markers: [] },
+      selectedId: null,
+      selectedMarkerId: null,
+      hoverId: null,
+      mode: "select",
+      view: "globe",
+      spinning: true,
+      globe: null,
+      projection: null,
+    };
+
+    function isProvince(f) { return !!(f && f.properties && f.properties.kind === "province"); }
+    function isChinaWorld(f) {
+      const n = (f.properties && f.properties.name) || "";
+      return n === "China" || String(f.id) === "156";
+    }
+    function isTaiwanWorld(f) {
+      const n = (f.properties && f.properties.name) || "";
+      return n === "Taiwan" || String(f.id) === "158";
+    }
+    function englishName(f) {
+      if (isProvince(f)) return f.properties.nameEn || f.properties.name;
+      return f.properties.name || f.properties.NAME || "Unknown";
+    }
+    function keyOf(f) { return String(f.id ?? englishName(f)); }
+    function hashTone(key) {
+      let h = 0;
+      for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      return TONES[h % TONES.length];
+    }
+    function displayName(f) {
+      const edit = state.edits.countries[keyOf(f)];
+      if (edit && edit.name) return edit.name;
+      if (isProvince(f)) return f.properties.name;
+      return ZH[englishName(f)] || englishName(f);
+    }
+    function fillColor(f) {
+      const edit = state.edits.countries[keyOf(f)];
+      if (edit && edit.color) return edit.color;
+      return hashTone(keyOf(f));
+    }
+    function mapFeatures() {
+      return state.countries.filter((f) => !isChinaWorld(f) && !isTaiwanWorld(f)).concat(state.provinces);
+    }
+    function findCountry(id) {
+      return mapFeatures().concat(state.countries).find((f) => keyOf(f) === id);
+    }
+    function centroid(f) {
+      const c = d3.geoCentroid(f);
+      return { lng: c[0], lat: c[1] };
+    }
+    function loadEdits() {
+      try {
+        const raw = localStorage.getItem(STORE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          state.edits.countries = parsed.countries || {};
+          state.edits.markers = parsed.markers || [];
+        }
+      } catch {}
+    }
+    function saveEdits() {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state.edits));
+    }
+    function ensureCountryEdit(id) {
+      if (!state.edits.countries[id]) state.edits.countries[id] = {};
+      return state.edits.countries[id];
+    }
+
+    async function loadWorld() {
+      let lastErr;
+      for (const url of TOPO_URLS) {
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(resp.statusText);
+          const topo = await resp.json();
+          return topojson.feature(topo, topo.objects.countries).features;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("无法加载世界地图数据");
+    }
+
+    async function loadChinaProvinces() {
+      let lastErr;
+      for (const url of CHINA_GEO_URLS) {
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(resp.statusText);
+          const geo = await resp.json();
+          return (geo.features || []).map((f) => {
+            const name = (f.properties && f.properties.name) || "未命名";
+            return {
+              type: "Feature",
+              id: "cn-" + String((f.properties && f.properties.id) || f.id || name),
+              properties: {
+                name,
+                nameEn: CN_EN[name] || name,
+                kind: "province",
+              },
+              geometry: f.geometry,
+            };
+          });
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("无法加载中国省份数据");
+    }
+
+    function parallelPoints(lat, steps = 180) {
+      const pts = [];
+      for (let i = 0; i <= steps; i++) pts.push([lat, -180 + (360 * i) / steps]);
+      return pts;
+    }
+    function parallelGeo(lat, step = 2) {
+      const coordinates = [];
+      for (let lng = -180; lng <= 180; lng += step) coordinates.push([lng, lat]);
+      return { type: "LineString", coordinates };
+    }
+    const POLAR_PATHS = [
+      { name: "北极圈", coords: parallelPoints(POLAR_CIRCLE_LAT), color: "#8ee3ff" },
+      { name: "南极圈", coords: parallelPoints(-POLAR_CIRCLE_LAT), color: "#8ee3ff" },
+    ];
+
+    function overlayItems() {
+      const items = POLAR_MARKS.concat(OCEAN_MARKS).map((m) => Object.assign({}, m));
+      state.edits.markers.forEach((m) => items.push(Object.assign({ kind: "pin" }, m)));
+      const f = findCountry(state.selectedId);
+      if (f) {
+        const c = centroid(f);
+        items.push({ id: "__sel__", kind: "label", lat: c.lat, lng: c.lng, title: displayName(f), color: "#f3d7a0" });
+      }
+      return items;
+    }
+
+    function markerElement(d) {
+      const el = document.createElement("div");
+      if (d.kind === "label") {
+        el.className = "country-float";
+        el.textContent = d.title || "";
+        return el;
+      }
+      if (d.kind === "ocean") {
+        el.className = "ocean-float";
+        el.innerHTML = `${escapeHtml(d.title)}<small>${escapeHtml(d.sub || "")}</small>`;
+        return el;
+      }
+      if (d.kind === "polar" || d.kind === "polar-pole") {
+        el.className = "polar-float";
+        el.innerHTML = (d.kind === "polar-pole" ? `<span class="polar-pole-dot"></span>` : "") +
+          `${escapeHtml(d.title)}<small>${escapeHtml(d.sub || "")}</small>`;
+        return el;
+      }
+      el.className = "pin" + (d.id === state.selectedMarkerId ? " active" : "");
+      el.innerHTML = `<span class="pin-dot" style="background:${d.color || "#e4b56a"}"></span><span class="pin-label">${escapeHtml(d.title || "标记")}</span>`;
+      el.style.pointerEvents = "auto";
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        selectMarker(d.id);
+      });
+      return el;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function createGlobe(el) {
+      if (typeof Globe !== "function") throw new Error("球体引擎加载失败，请检查网络");
+      try {
+        return new Globe(el);
+      } catch {
+        return Globe()(el);
+      }
+    }
+
+    function setupGlobe() {
+      const el = $("globe");
+      const globe = createGlobe(el)
+        .backgroundImageUrl(IMG.stars)
+        .globeImageUrl(IMG.political)
+        .bumpImageUrl("https://cdn.jsdelivr.net/npm/three-globe@2.44.1/example/img/earth-topology.png")
+        .atmosphereColor("#9ecbff")
+        .atmosphereAltitude(0.18)
+        .polygonsData(mapFeatures())
+        .polygonCapColor((d) => {
+          const c = fillColor(d);
+          return keyOf(d) === state.selectedId ? c : hexToRgba(c, 0.82);
+        })
+        .polygonSideColor(() => "rgba(0,0,0,0.28)")
+        .polygonStrokeColor((d) => {
+          if (keyOf(d) === state.selectedId) return "#f3d7a0";
+          return isProvince(d) ? "rgba(243,215,160,0.5)" : "rgba(243,215,160,0.22)";
+        })
+        .polygonAltitude((d) => keyOf(d) === state.selectedId ? 0.07 : keyOf(d) === state.hoverId ? 0.035 : 0.01)
+        .polygonLabel((d) => `<div style="font-family:Noto Sans SC,sans-serif">${escapeHtml(displayName(d))}${isProvince(d) ? " · 中国" : ""}</div>`)
+        .onPolygonHover((d) => {
+          state.hoverId = d ? keyOf(d) : null;
+          globe.polygonAltitude(globe.polygonAltitude());
+          $("coords").textContent = d
+            ? `${displayName(d)} · ${englishName(d)}${isProvince(d) ? " · 中国省份" : ""}`
+            : "拖拽旋转 · 滚轮缩放 · 点击国家或省份可编辑";
+        })
+        .onPolygonClick((d) => {
+          if (state.mode === "pin") return;
+          selectCountry(keyOf(d), true);
+        })
+        .onGlobeClick(({ lat, lng }) => {
+          $("coords").textContent = `${lat.toFixed(2)}°, ${lng.toFixed(2)}°`;
+          if (state.mode === "pin") addMarker(lat, lng);
+        })
+        .pathsData(POLAR_PATHS)
+        .pathPoints("coords")
+        .pathPointLat((p) => p[0])
+        .pathPointLng((p) => p[1])
+        .pathColor((d) => d.color)
+        .pathStroke(0.85)
+        .pathPointAlt(0.012)
+        .pathDashLength(0.06)
+        .pathDashGap(0.035)
+        .pathDashAnimateTime(12000)
+        .pathLabel((d) => `<div style="font-family:Noto Sans SC,sans-serif">${d.name}</div>`)
+        .htmlElementsData(overlayItems())
+        .htmlLat("lat")
+        .htmlLng("lng")
+        .htmlAltitude((d) => d.kind === "polar-pole" ? 0.045 : d.kind === "ocean" ? 0.012 : 0.02)
+        .htmlElement(markerElement);
+
+      globe.controls().autoRotate = true;
+      globe.controls().autoRotateSpeed = 0.45;
+      globe.controls().enableDamping = true;
+      globe.pointOfView({ lat: 25, lng: 105, altitude: 2.15 }, 0);
+      state.globe = globe;
+      resizeGlobe();
+    }
+
+    function hexToRgba(hex, a) {
+      const h = hex.replace("#", "");
+      const n = parseInt(h.length === 3 ? h.split("").map((x) => x + x).join("") : h, 16);
+      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+    }
+
+    function refreshGlobe() {
+      const g = state.globe;
+      if (!g) return;
+      g.polygonsData(mapFeatures());
+      g.polygonCapColor(g.polygonCapColor());
+      g.polygonStrokeColor(g.polygonStrokeColor());
+      g.polygonAltitude(g.polygonAltitude());
+      g.htmlElementsData(overlayItems());
+    }
+
+    function setupFlat() {
+      const host = $("flat");
+      host.innerHTML = "";
+      const w = host.clientWidth || 800;
+      const h = host.clientHeight || 600;
+      const svg = d3.select(host).append("svg").attr("viewBox", `0 0 ${w} ${h}`);
+      const projection = d3.geoNaturalEarth1().fitExtent([[16, 16], [w - 16, h - 16]], { type: "Sphere" });
+      state.projection = projection;
+      const path = d3.geoPath(projection);
+      svg.append("path").datum({ type: "Sphere" }).attr("d", path).attr("fill", "#0b1528").attr("stroke", "rgba(243,215,160,0.2)");
+      svg.append("g").attr("class", "land").selectAll("path")
+        .data(mapFeatures())
+        .join("path")
+        .attr("d", path)
+        .attr("data-id", (d) => keyOf(d))
+        .attr("stroke-width", (d) => isProvince(d) ? 0.7 : 0.4)
+        .on("mouseenter", (event, d) => {
+          $("tooltip").style.display = "block";
+          $("tooltip").textContent = displayName(d);
+          $("coords").textContent = `${displayName(d)} · ${englishName(d)}${isProvince(d) ? " · 中国省份" : ""}`;
+        })
+        .on("mousemove", (event) => {
+          $("tooltip").style.left = event.offsetX + "px";
+          $("tooltip").style.top = event.offsetY + "px";
+        })
+        .on("mouseleave", () => { $("tooltip").style.display = "none"; })
+        .on("click", (event, d) => {
+          event.stopPropagation();
+          if (state.mode === "pin") {
+            const [lng, lat] = projection.invert(d3.pointer(event, svg.node()));
+            addMarker(lat, lng);
+            return;
+          }
+          selectCountry(keyOf(d), true);
+        });
+      svg.on("click", (event) => {
+        if (state.mode !== "pin") return;
+        const inv = projection.invert(d3.pointer(event, svg.node()));
+        if (inv) addMarker(inv[1], inv[0]);
+      });
+      svg.append("g").attr("class", "polar").selectAll("path")
+        .data([
+          { name: "北极圈", geo: parallelGeo(POLAR_CIRCLE_LAT) },
+          { name: "南极圈", geo: parallelGeo(-POLAR_CIRCLE_LAT) },
+        ])
+        .join("path")
+        .attr("class", "polar-line")
+        .attr("d", (d) => path(d.geo));
+      svg.append("g").attr("class", "polar-labels").selectAll("g")
+        .data(POLAR_MARKS)
+        .join("g")
+        .attr("transform", (d) => {
+          const p = projection([d.lng, d.lat]);
+          return p ? `translate(${p[0]},${p[1]})` : "translate(-99,-99)";
+        })
+        .each(function (d) {
+          const g = d3.select(this);
+          if (d.kind === "polar-pole") g.append("circle").attr("class", "polar-dot").attr("r", 4);
+          g.append("text").attr("class", "polar-tag").attr("text-anchor", "middle")
+            .attr("y", d.kind === "polar-pole" ? -10 : -6).text(d.title);
+          g.append("text").attr("class", "polar-tag").attr("text-anchor", "middle")
+            .attr("y", d.kind === "polar-pole" ? 16 : 10).attr("opacity", 0.75).style("font-size", "10px").text(d.sub);
+        });
+      svg.append("g").attr("class", "ocean-labels").selectAll("g")
+        .data(OCEAN_MARKS)
+        .join("g")
+        .attr("transform", (d) => {
+          const p = projection([d.lng, d.lat]);
+          return p ? `translate(${p[0]},${p[1]})` : "translate(-99,-99)";
+        })
+        .each(function (d) {
+          const g = d3.select(this);
+          g.append("text").attr("class", "ocean-tag").attr("text-anchor", "middle").attr("y", -4).text(d.title);
+          g.append("text").attr("class", "ocean-sub").attr("text-anchor", "middle").attr("y", 14).text(d.sub);
+        });
+      svg.append("g").attr("class", "pins");
+      refreshFlat();
+    }
+
+    function refreshFlat() {
+      const host = $("flat");
+      const svg = d3.select(host).select("svg");
+      if (svg.empty()) return;
+      svg.select(".land").selectAll("path")
+        .attr("fill", (d) => fillColor(d))
+        .attr("class", (d) => keyOf(d) === state.selectedId ? "selected" : null);
+      const projection = state.projection;
+      svg.select(".pins").selectAll("g.pin2").data(state.edits.markers, (d) => d.id)
+        .join((enter) => {
+          const g = enter.append("g").attr("class", "pin2").style("cursor", "pointer");
+          g.append("circle").attr("r", 5).attr("stroke", "#fff").attr("stroke-width", 1);
+          g.append("text").attr("y", -10).attr("text-anchor", "middle").attr("fill", "#f3d7a0").attr("font-size", 11);
+          g.on("click", (event, d) => { event.stopPropagation(); selectMarker(d.id); });
+          return g;
+        })
+        .attr("transform", (d) => {
+          const p = projection([d.lng, d.lat]);
+          return p ? `translate(${p[0]},${p[1]})` : "translate(-99,-99)";
+        })
+        .each(function (d) {
+          d3.select(this).select("circle").attr("fill", d.color || "#e4b56a");
+          d3.select(this).select("text").text(d.title || "标记");
+        });
+    }
+
+    function refreshAll() {
+      refreshGlobe();
+      refreshFlat();
+      renderLists();
+      renderEditor();
+    }
+
+    function renderLists() {
+      $("polarList").innerHTML = POLAR_MARKS.map((m) => `
+        <button type="button" data-polar="${m.id}">
+          ${escapeHtml(m.title)}
+          <br><small>${escapeHtml(m.sub)}</small>
+        </button>
+      `).join("");
+      $("polarList").querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const mark = POLAR_MARKS.find((m) => m.id === btn.dataset.polar);
+          if (!mark) return;
+          $("coords").textContent = `${mark.title} · ${mark.sub}`;
+          if (state.view === "globe") flyTo(mark.view.lat, mark.view.lng, mark.view.altitude);
+        });
+      });
+      $("oceanList").innerHTML = OCEAN_MARKS.filter((m) => !m.silent).map((m) => `
+        <button type="button" data-ocean="${m.id}">
+          ${escapeHtml(m.title)}
+          <br><small>${escapeHtml(m.sub)}</small>
+        </button>
+      `).join("");
+      $("oceanList").querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const mark = OCEAN_MARKS.find((m) => m.id === btn.dataset.ocean);
+          if (!mark) return;
+          $("coords").textContent = `${mark.title} · ${mark.sub}`;
+          if (state.view === "globe") flyTo(mark.view.lat, mark.view.lng, mark.view.altitude);
+        });
+      });
+      const q = $("search").value.trim().toLowerCase();
+      const countryRows = state.countries
+        .filter((f) => !isTaiwanWorld(f))
+        .map((f) => ({ f, id: keyOf(f), name: displayName(f), en: englishName(f) }))
+        .filter((x) => !q || x.name.toLowerCase().includes(q) || x.en.toLowerCase().includes(q))
+        .sort((a, b) => a.name.localeCompare(b.name, "zh"));
+      $("countHint").textContent = `${state.countries.filter((f) => !isTaiwanWorld(f)).length} 个国家 / 地区` + (q ? ` · 筛选 ${countryRows.length}` : "");
+      $("countryList").innerHTML = countryRows.map((x) => `
+        <button type="button" data-id="${x.id}" class="${x.id === state.selectedId ? "active" : ""}">
+          <span class="swatch" style="background:${isChinaWorld(x.f) ? "#c23b22" : fillColor(x.f)}"></span>${escapeHtml(x.name)}
+          <br><small>${escapeHtml(isChinaWorld(x.f) ? "含省级行政区" : x.en)}</small>
+        </button>
+      `).join("");
+      $("countryList").querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => selectCountry(btn.dataset.id, true));
+      });
+      const provinceRows = state.provinces
+        .map((f) => ({ f, id: keyOf(f), name: displayName(f), en: englishName(f) }))
+        .filter((x) => !q || x.name.toLowerCase().includes(q) || x.en.toLowerCase().includes(q))
+        .sort((a, b) => a.name.localeCompare(b.name, "zh"));
+      $("provinceHint").textContent = `${state.provinces.length} 个省级行政区` + (q ? ` · 筛选 ${provinceRows.length}` : "");
+      $("provinceList").innerHTML = provinceRows.map((x) => `
+        <button type="button" data-id="${x.id}" class="${x.id === state.selectedId ? "active" : ""}">
+          <span class="swatch" style="background:${fillColor(x.f)}"></span>${escapeHtml(x.name)}
+          <br><small>${escapeHtml(x.en)}</small>
+        </button>
+      `).join("");
+      $("provinceList").querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => selectCountry(btn.dataset.id, true));
+      });
+      $("markerList").innerHTML = state.edits.markers.length
+        ? state.edits.markers.map((m) => `
+            <div class="marker-item ${m.id === state.selectedMarkerId ? "active" : ""}" data-id="${m.id}">
+              <b>${escapeHtml(m.title || "未命名标记")}</b>
+              <small>${m.lat.toFixed(1)}, ${m.lng.toFixed(1)}</small>
+            </div>
+          `).join("")
+        : `<p class="hint">切换到「钉标记」，再点地图放置。</p>`;
+      $("markerList").querySelectorAll(".marker-item").forEach((el) => {
+        el.addEventListener("click", () => selectMarker(el.dataset.id));
+      });
+    }
+
+    function renderEditor() {
+      const country = findCountry(state.selectedId);
+      const marker = state.edits.markers.find((m) => m.id === state.selectedMarkerId);
+      $("countryEdit").hidden = !country;
+      $("markerEdit").hidden = !marker;
+      if (country) {
+        const edit = state.edits.countries[state.selectedId] || {};
+        $("editHint").textContent = `正在编辑：${displayName(country)}`;
+        $("editName").value = edit.name || displayName(country);
+        $("editColor").value = edit.color || fillColor(country);
+        $("editNote").value = edit.note || "";
+      } else if (marker) {
+        $("editHint").textContent = `正在编辑标记：${marker.title || "未命名"}`;
+        $("markerTitle").value = marker.title || "";
+        $("markerNote").value = marker.note || "";
+        $("markerColor").value = marker.color || "#e4b56a";
+      } else {
+        $("editHint").textContent = state.mode === "pin"
+          ? "点击地球或平面地图上的任意位置，放下一个标记。"
+          : "点击地球上的国家或中国省份，或左侧列表，开始上色和改名。";
+      }
+    }
+
+    function flyTo(lat, lng, altitude = 1.65) {
+      if (state.globe) state.globe.pointOfView({ lat, lng, altitude }, 900);
+    }
+
+    function selectCountry(id, fly) {
+      const f = findCountry(id);
+      if (f && isChinaWorld(f)) {
+        state.selectedId = null;
+        state.selectedMarkerId = null;
+        $("coords").textContent = "中国 · 已展开省级行政区";
+        if (fly && state.view === "globe") flyTo(35.8, 104.2, 1.28);
+        refreshAll();
+        return;
+      }
+      state.selectedId = id;
+      state.selectedMarkerId = null;
+      if (f && fly && state.view === "globe") {
+        const c = centroid(f);
+        flyTo(c.lat, c.lng, isProvince(f) ? 1.12 : 1.65);
+      }
+      refreshAll();
+    }
+
+    function selectMarker(id) {
+      state.selectedMarkerId = id;
+      state.selectedId = null;
+      const m = state.edits.markers.find((x) => x.id === id);
+      if (m && state.view === "globe") flyTo(m.lat, m.lng, 1.4);
+      refreshAll();
+    }
+
+    function addMarker(lat, lng) {
+      const marker = {
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        lat, lng,
+        title: "新标记",
+        note: "",
+        color: "#e4b56a",
+      };
+      state.edits.markers.push(marker);
+      saveEdits();
+      selectMarker(marker.id);
+    }
+
+    function setView(view) {
+      state.view = view;
+      $("viewGlobe").classList.toggle("active", view === "globe");
+      $("viewFlat").classList.toggle("active", view === "flat");
+      $("globe").style.display = view === "globe" ? "block" : "none";
+      $("flat").style.display = view === "flat" ? "block" : "none";
+      if (view === "flat") setupFlat();
+      else resizeGlobe();
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      $("modeSelect").classList.toggle("active", mode === "select");
+      $("modePin").classList.toggle("active", mode === "pin");
+      $("coords").textContent = mode === "pin" ? "点击地图放置标记" : "拖拽旋转 · 滚轮缩放 · 点击国家或省份可编辑";
+      renderEditor();
+    }
+
+    function resizeGlobe() {
+      if (!state.globe) return;
+      const el = $("globe");
+      state.globe.width(el.clientWidth).height(el.clientHeight);
+    }
+
+    PRESETS.forEach((color) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.style.background = color;
+      btn.title = color;
+      btn.addEventListener("click", () => {
+        if (!state.selectedId) return;
+        ensureCountryEdit(state.selectedId).color = color;
+        saveEdits();
+        refreshAll();
+      });
+      $("presets").appendChild(btn);
+    });
+
+    $("search").addEventListener("input", renderLists);
+    $("editName").addEventListener("input", () => {
+      if (!state.selectedId) return;
+      ensureCountryEdit(state.selectedId).name = $("editName").value;
+      saveEdits();
+      refreshAll();
+    });
+    $("editColor").addEventListener("input", () => {
+      if (!state.selectedId) return;
+      ensureCountryEdit(state.selectedId).color = $("editColor").value;
+      saveEdits();
+      refreshAll();
+    });
+    $("editNote").addEventListener("input", () => {
+      if (!state.selectedId) return;
+      ensureCountryEdit(state.selectedId).note = $("editNote").value;
+      saveEdits();
+    });
+    $("resetCountry").addEventListener("click", () => {
+      if (!state.selectedId) return;
+      delete state.edits.countries[state.selectedId];
+      saveEdits();
+      refreshAll();
+    });
+    $("markerTitle").addEventListener("input", () => {
+      const m = state.edits.markers.find((x) => x.id === state.selectedMarkerId);
+      if (!m) return;
+      m.title = $("markerTitle").value;
+      saveEdits();
+      refreshAll();
+    });
+    $("markerNote").addEventListener("input", () => {
+      const m = state.edits.markers.find((x) => x.id === state.selectedMarkerId);
+      if (!m) return;
+      m.note = $("markerNote").value;
+      saveEdits();
+    });
+    $("markerColor").addEventListener("input", () => {
+      const m = state.edits.markers.find((x) => x.id === state.selectedMarkerId);
+      if (!m) return;
+      m.color = $("markerColor").value;
+      saveEdits();
+      refreshAll();
+    });
+    $("deleteMarker").addEventListener("click", () => {
+      state.edits.markers = state.edits.markers.filter((m) => m.id !== state.selectedMarkerId);
+      state.selectedMarkerId = null;
+      saveEdits();
+      refreshAll();
+    });
+    $("viewGlobe").addEventListener("click", () => setView("globe"));
+    $("viewFlat").addEventListener("click", () => setView("flat"));
+    $("modeSelect").addEventListener("click", () => setMode("select"));
+    $("modePin").addEventListener("click", () => setMode("pin"));
+    $("toggleSpin").addEventListener("click", () => {
+      state.spinning = !state.spinning;
+      $("toggleSpin").classList.toggle("active", state.spinning);
+      if (state.globe) state.globe.controls().autoRotate = state.spinning;
+    });
+    $("texture").addEventListener("change", () => {
+      if (state.globe) state.globe.globeImageUrl(IMG[$("texture").value]);
+    });
+    $("randomColors").addEventListener("click", () => {
+      mapFeatures().forEach((f) => {
+        ensureCountryEdit(keyOf(f)).color = PRESETS[Math.floor(Math.random() * PRESETS.length)];
+      });
+      saveEdits();
+      refreshAll();
+    });
+    $("resetAll").addEventListener("click", () => {
+      if (!confirm("清空本机保存的全部颜色、名称、备注和标记？")) return;
+      state.edits = { countries: {}, markers: [] };
+      state.selectedId = null;
+      state.selectedMarkerId = null;
+      saveEdits();
+      refreshAll();
+    });
+    $("exportBtn").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(state.edits, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "world-map.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    $("importBtn").addEventListener("click", () => $("importFile").click());
+    $("importFile").addEventListener("change", async () => {
+      const file = $("importFile").files[0];
+      $("importFile").value = "";
+      if (!file) return;
+      try {
+        const parsed = JSON.parse(await file.text());
+        state.edits.countries = parsed.countries || {};
+        state.edits.markers = parsed.markers || [];
+        saveEdits();
+        refreshAll();
+      } catch (err) {
+        $("error").textContent = "导入失败：" + (err.message || err);
+      }
+    });
+    window.addEventListener("resize", () => {
+      resizeGlobe();
+      if (state.view === "flat") setupFlat();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        state.selectedId = null;
+        state.selectedMarkerId = null;
+        refreshAll();
+      }
+      if ((ev.key === "Delete" || ev.key === "Backspace") && state.selectedMarkerId && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+        $("deleteMarker").click();
+      }
+    });
+
+    (async function init() {
+      try {
+        loadEdits();
+        state.countries = await loadWorld();
+        try {
+          state.provinces = await loadChinaProvinces();
+        } catch (err) {
+          state.provinces = [];
+          $("error").textContent = "中国省份数据加载失败：" + (err.message || err);
+        }
+        setupGlobe();
+        setupFlat();
+        setMode("select");
+        $("toggleSpin").classList.add("active");
+        $("modeSelect").classList.add("active");
+        refreshAll();
+        $("loading").remove();
+      } catch (err) {
+        $("loading").textContent = "地图数据加载失败，请检查网络后刷新。";
+        $("error").textContent = String(err.message || err);
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -2,6 +2,8 @@
 
 一个基于 globe.gl / Three.js 的 3D 可交互世界地图，支持球形与平面两种视图，可点选国家及其一级行政区进行编辑。
 
+**在线预览**：https://jijihuanhuan.github.io/3Dmap/
+
 ## 功能特性
 
 - 球形 / 平面两种视图切换
@@ -16,7 +18,7 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `globe.html` | 前端页面（单文件应用，依赖 CDN） |
+| `index.html` | 前端页面（网站首页，依赖 CDN） |
 | `china-provinces.json` | 中国 34 个省级行政区边界 |
 | `world-states.json` | 全球 241 个国家和地区的一级行政区边界（约 4600 个） |
 | `启动.bat` | Windows 一键启动脚本 |
@@ -27,7 +29,7 @@
 **Windows 一键启动**
 
 1. 双击「启动.bat」（需已安装 Python 3）
-2. 浏览器自动打开 http://127.0.0.1:8760/globe.html
+2. 浏览器自动打开 http://127.0.0.1:8760/index.html
 
 **手动启动**：在本目录下运行任意静态文件服务器，例如：
 
@@ -35,9 +37,15 @@
 python -m http.server 8760 --bind 127.0.0.1
 ```
 
-然后访问 `http://127.0.0.1:8760/globe.html`。
+然后访问 `http://127.0.0.1:8760/index.html`。
 
-> 注意：不要直接用文件资源管理器双击 `globe.html`，浏览器会因本地文件访问限制拦截 JSON 加载。
+> 注意：不要直接用文件资源管理器双击 `index.html`，浏览器会因本地文件访问限制拦截 JSON 加载。
+
+## 在线部署（GitHub Pages）
+
+仓库已配置 GitHub Pages（部署 `main` 分支根目录），访问：
+
+https://jijihuanhuan.github.io/3Dmap/
 
 ## 行政区数据
 

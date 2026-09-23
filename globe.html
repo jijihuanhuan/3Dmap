@@ -163,12 +163,15 @@
         <h2 style="margin-top:16px">大洋</h2>
         <div class="list" id="oceanList"></div>
         <h2 style="margin-top:16px">国家</h2>
-        <input type="search" id="search" placeholder="搜索国家 / 省份" />
+        <input type="search" id="search" placeholder="搜索国家 / 行政区" />
         <p class="hint" id="countHint" style="margin:8px 0 10px"></p>
         <div class="list" id="countryList"></div>
-        <h2 style="margin-top:18px">中国省份</h2>
-        <p class="hint" id="provinceHint" style="margin:8px 0 10px"></p>
-        <div class="list" id="provinceList"></div>
+        <h2 style="margin-top:18px">行政区 <span class="hint" id="regionTitle" style="text-transform:none;letter-spacing:0"></span></h2>
+        <div class="bar" style="margin:8px 0 4px">
+          <button class="go ghost" id="collapseBtn" type="button" hidden>收起行政区</button>
+        </div>
+        <p class="hint" id="regionHint" style="margin:8px 0 10px"></p>
+        <div class="list" id="regionList"></div>
         <h2 style="margin-top:18px">标记</h2>
         <div class="list" id="markerList"></div>
       </aside>
@@ -176,13 +179,13 @@
         <div id="globe"></div>
         <div id="flat"></div>
         <div id="tooltip"></div>
-        <div class="coords" id="coords">拖拽旋转 · 滚轮缩放 · 点击国家或省份可编辑</div>
-        <div class="legend">中国省级行政区 · 四大洋 · 极圈 · 编辑保存在本机</div>
+        <div class="coords" id="coords">拖拽旋转 · 滚轮缩放 · 点击国家或行政区可编辑</div>
+        <div class="legend">国家行政区 · 四大洋 · 极圈 · 编辑保存在本机</div>
         <div class="loading" id="loading">正在展开地球…</div>
       </div>
       <section class="editor">
         <h2>编辑</h2>
-        <p class="hint" id="editHint">点击地球上的国家或中国省份，或左侧列表，开始上色和改名。</p>
+        <p class="hint" id="editHint">点击地球上的国家或行政区，或左侧列表，开始上色和改名。</p>
         <div id="countryEdit" hidden>
           <label>显示名称</label>
           <input type="text" id="editName" />
@@ -229,6 +232,191 @@
       "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json",
       "https://unpkg.com/world-atlas@2.0.2/countries-110m.json",
     ];
+    const WORLD_STATES_URLS = [
+      "./world-states.json",
+      "/static/world-states.json",
+    ];
+    // 国家英文名 -> ISO 3166-1 alpha-2（用于关联国家轮廓与其一级行政区）
+    // 数据来源：Natural Earth 110m admin-0（公有领域），Macedonia 等个别名称手工修正
+    const NAME_TO_A2 = {
+      "Fiji": "FJ",
+      "Tanzania": "TZ",
+      "W. Sahara": "EH",
+      "Canada": "CA",
+      "United States of America": "US",
+      "Kazakhstan": "KZ",
+      "Uzbekistan": "UZ",
+      "Papua New Guinea": "PG",
+      "Indonesia": "ID",
+      "Argentina": "AR",
+      "Chile": "CL",
+      "Dem. Rep. Congo": "CD",
+      "Somalia": "SO",
+      "Kenya": "KE",
+      "Sudan": "SD",
+      "Chad": "TD",
+      "Haiti": "HT",
+      "Dominican Rep.": "DO",
+      "Russia": "RU",
+      "Bahamas": "BS",
+      "Falkland Is.": "FK",
+      "Norway": "NO",
+      "Greenland": "GL",
+      "Fr. S. Antarctic Lands": "TF",
+      "Timor-Leste": "TL",
+      "South Africa": "ZA",
+      "Lesotho": "LS",
+      "Mexico": "MX",
+      "Uruguay": "UY",
+      "Brazil": "BR",
+      "Bolivia": "BO",
+      "Peru": "PE",
+      "Colombia": "CO",
+      "Panama": "PA",
+      "Costa Rica": "CR",
+      "Nicaragua": "NI",
+      "Honduras": "HN",
+      "El Salvador": "SV",
+      "Guatemala": "GT",
+      "Belize": "BZ",
+      "Venezuela": "VE",
+      "Guyana": "GY",
+      "Suriname": "SR",
+      "France": "FR",
+      "Ecuador": "EC",
+      "Puerto Rico": "PR",
+      "Jamaica": "JM",
+      "Cuba": "CU",
+      "Zimbabwe": "ZW",
+      "Botswana": "BW",
+      "Namibia": "NA",
+      "Senegal": "SN",
+      "Mali": "ML",
+      "Mauritania": "MR",
+      "Benin": "BJ",
+      "Niger": "NE",
+      "Nigeria": "NG",
+      "Cameroon": "CM",
+      "Togo": "TG",
+      "Ghana": "GH",
+      "Côte d'Ivoire": "CI",
+      "Guinea": "GN",
+      "Guinea-Bissau": "GW",
+      "Liberia": "LR",
+      "Sierra Leone": "SL",
+      "Burkina Faso": "BF",
+      "Central African Rep.": "CF",
+      "Congo": "CG",
+      "Gabon": "GA",
+      "Eq. Guinea": "GQ",
+      "Zambia": "ZM",
+      "Malawi": "MW",
+      "Mozambique": "MZ",
+      "eSwatini": "SZ",
+      "Angola": "AO",
+      "Burundi": "BI",
+      "Israel": "IL",
+      "Lebanon": "LB",
+      "Madagascar": "MG",
+      "Palestine": "PS",
+      "Gambia": "GM",
+      "Tunisia": "TN",
+      "Algeria": "DZ",
+      "Jordan": "JO",
+      "United Arab Emirates": "AE",
+      "Qatar": "QA",
+      "Kuwait": "KW",
+      "Iraq": "IQ",
+      "Oman": "OM",
+      "Vanuatu": "VU",
+      "Cambodia": "KH",
+      "Thailand": "TH",
+      "Laos": "LA",
+      "Myanmar": "MM",
+      "Vietnam": "VN",
+      "North Korea": "KP",
+      "South Korea": "KR",
+      "Mongolia": "MN",
+      "India": "IN",
+      "Bangladesh": "BD",
+      "Bhutan": "BT",
+      "Nepal": "NP",
+      "Pakistan": "PK",
+      "Afghanistan": "AF",
+      "Tajikistan": "TJ",
+      "Kyrgyzstan": "KG",
+      "Turkmenistan": "TM",
+      "Iran": "IR",
+      "Syria": "SY",
+      "Armenia": "AM",
+      "Sweden": "SE",
+      "Belarus": "BY",
+      "Ukraine": "UA",
+      "Poland": "PL",
+      "Austria": "AT",
+      "Hungary": "HU",
+      "Moldova": "MD",
+      "Romania": "RO",
+      "Lithuania": "LT",
+      "Latvia": "LV",
+      "Estonia": "EE",
+      "Germany": "DE",
+      "Bulgaria": "BG",
+      "Greece": "GR",
+      "Turkey": "TR",
+      "Albania": "AL",
+      "Croatia": "HR",
+      "Switzerland": "CH",
+      "Luxembourg": "LU",
+      "Belgium": "BE",
+      "Netherlands": "NL",
+      "Portugal": "PT",
+      "Spain": "ES",
+      "Ireland": "IE",
+      "New Caledonia": "NC",
+      "Solomon Is.": "SB",
+      "New Zealand": "NZ",
+      "Australia": "AU",
+      "Sri Lanka": "LK",
+      "China": "CN",
+      "Taiwan": "TW",
+      "Italy": "IT",
+      "Denmark": "DK",
+      "United Kingdom": "GB",
+      "Iceland": "IS",
+      "Azerbaijan": "AZ",
+      "Georgia": "GE",
+      "Philippines": "PH",
+      "Malaysia": "MY",
+      "Brunei": "BN",
+      "Slovenia": "SI",
+      "Finland": "FI",
+      "Slovakia": "SK",
+      "Czechia": "CZ",
+      "Eritrea": "ER",
+      "Japan": "JP",
+      "Paraguay": "PY",
+      "Yemen": "YE",
+      "Saudi Arabia": "SA",
+      "Antarctica": "AQ",
+      "N. Cyprus": "-99",
+      "Cyprus": "CY",
+      "Morocco": "MA",
+      "Egypt": "EG",
+      "Libya": "LY",
+      "Ethiopia": "ET",
+      "Djibouti": "DJ",
+      "Somaliland": "-99",
+      "Uganda": "UG",
+      "Rwanda": "RW",
+      "Bosnia and Herz.": "BA",
+      "Macedonia": "MK",
+      "Serbia": "RS",
+      "Montenegro": "ME",
+      "Kosovo": "XK",
+      "Trinidad and Tobago": "TT",
+      "S. Sudan": "SS",
+    };
     const CHINA_GEO_URLS = [
       "./china-provinces.json",
       "/static/china-provinces.json",
@@ -288,6 +476,7 @@
       "Lesotho": "莱索托", "Liberia": "利比里亚", "Libya": "利比亚", "Lithuania": "立陶宛",
       "Luxembourg": "卢森堡", "Madagascar": "马达加斯加", "Malawi": "马拉维", "Malaysia": "马来西亚",
       "Mali": "马里", "Mauritania": "毛里塔尼亚", "Mexico": "墨西哥", "Moldova": "摩尔多瓦",
+      "Macedonia": "北马其顿",
       "Mongolia": "蒙古", "Montenegro": "黑山", "Morocco": "摩洛哥", "Mozambique": "莫桑比克",
       "Myanmar": "缅甸", "N. Cyprus": "北塞浦路斯", "Namibia": "纳米比亚", "Nepal": "尼泊尔",
       "Netherlands": "荷兰", "New Caledonia": "新喀里多尼亚", "New Zealand": "新西兰", "Nicaragua": "尼加拉瓜",
@@ -313,6 +502,8 @@
     const state = {
       countries: [],
       provinces: [],
+      regions: [],
+      expandedKey: null,
       edits: { countries: {}, markers: [] },
       selectedId: null,
       selectedMarkerId: null,
@@ -325,6 +516,25 @@
     };
 
     function isProvince(f) { return !!(f && f.properties && f.properties.kind === "province"); }
+    function isRegion(f) { return !!(f && f.properties && f.properties.kind === "region"); }
+    function isSubdiv(f) { return isProvince(f) || isRegion(f); }
+    function expandedCountry() {
+      if (state.expandedKey == null) return null;
+      return state.countries.find((f) => keyOf(f) === state.expandedKey) || null;
+    }
+    function regionsOf(f) {
+      const a2 = f && f.properties && f.properties.iso_a2;
+      if (!a2 || a2 === "-99" || a2 === "-1") return [];
+      return state.regions.filter((g) => g.properties.countryA2 === a2);
+    }
+    function subdivCountryName(f) {
+      if (isProvince(f)) return "中国";
+      if (isRegion(f)) {
+        const cf = state.countries.find((c) => c.properties.iso_a2 === f.properties.countryA2);
+        return cf ? displayName(cf) : "";
+      }
+      return "";
+    }
     function isChinaWorld(f) {
       const n = (f.properties && f.properties.name) || "";
       return n === "China" || String(f.id) === "156";
@@ -334,7 +544,7 @@
       return n === "Taiwan" || String(f.id) === "158";
     }
     function englishName(f) {
-      if (isProvince(f)) return f.properties.nameEn || f.properties.name;
+      if (isSubdiv(f)) return f.properties.nameEn || f.properties.name;
       return f.properties.name || f.properties.NAME || "Unknown";
     }
     function keyOf(f) { return String(f.id ?? englishName(f)); }
@@ -346,7 +556,7 @@
     function displayName(f) {
       const edit = state.edits.countries[keyOf(f)];
       if (edit && edit.name) return edit.name;
-      if (isProvince(f)) return f.properties.name;
+      if (isSubdiv(f)) return f.properties.name;
       return ZH[englishName(f)] || englishName(f);
     }
     function fillColor(f) {
@@ -354,8 +564,19 @@
       if (edit && edit.color) return edit.color;
       return hashTone(keyOf(f));
     }
+    function subdivLabel(f) {
+      if (isChinaWorld(f)) return "含省级行政区" + (state.expandedKey === keyOf(f) ? " · 已展开" : "");
+      const n = regionsOf(f).length;
+      if (!n) return englishName(f);
+      return `含 ${n} 个行政区` + (state.expandedKey === keyOf(f) ? " · 已展开" : "");
+    }
     function mapFeatures() {
-      return state.countries.filter((f) => !isChinaWorld(f) && !isTaiwanWorld(f)).concat(state.provinces);
+      const ef = expandedCountry();
+      const out = state.countries.filter((f) =>
+        !isChinaWorld(f) && !isTaiwanWorld(f) && !(ef && keyOf(f) === keyOf(ef))
+      );
+      if (ef) out.push(...(isChinaWorld(ef) ? state.provinces : regionsOf(ef)));
+      return out;
     }
     function findCountry(id) {
       return mapFeatures().concat(state.countries).find((f) => keyOf(f) === id);
@@ -389,12 +610,44 @@
           const resp = await fetch(url);
           if (!resp.ok) throw new Error(resp.statusText);
           const topo = await resp.json();
-          return topojson.feature(topo, topo.objects.countries).features;
+          return topojson.feature(topo, topo.objects.countries).features.map((f) => {
+            const p = f.properties || {};
+            return { ...f, properties: { ...p, iso_a2: NAME_TO_A2[p.name] || p.iso_a2 || "" } };
+          });
         } catch (err) {
           lastErr = err;
         }
       }
       throw lastErr || new Error("无法加载世界地图数据");
+    }
+
+    async function loadWorldStates() {
+      let lastErr;
+      for (const url of WORLD_STATES_URLS) {
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(resp.statusText);
+          const topo = await resp.json();
+          const feats = topojson.feature(topo, topo.objects.states).features;
+          return feats.map((f) => {
+            const p = f.properties || {};
+            return {
+              type: "Feature",
+              id: "st-" + String(p.iso_3166_2 || p.name),
+              properties: {
+                name: p.name || "未命名",
+                nameEn: p.name || "未命名",
+                kind: "region",
+                countryA2: p.iso_a2 || "",
+              },
+              geometry: f.geometry,
+            };
+          });
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("无法加载全球行政区数据");
     }
 
     async function loadChinaProvinces() {
@@ -507,16 +760,19 @@
         .polygonSideColor(() => "rgba(0,0,0,0.28)")
         .polygonStrokeColor((d) => {
           if (keyOf(d) === state.selectedId) return "#f3d7a0";
-          return isProvince(d) ? "rgba(243,215,160,0.5)" : "rgba(243,215,160,0.22)";
+          return isSubdiv(d) ? "rgba(243,215,160,0.5)" : "rgba(243,215,160,0.22)";
         })
         .polygonAltitude((d) => keyOf(d) === state.selectedId ? 0.07 : keyOf(d) === state.hoverId ? 0.035 : 0.01)
-        .polygonLabel((d) => `<div style="font-family:Noto Sans SC,sans-serif">${escapeHtml(displayName(d))}${isProvince(d) ? " · 中国" : ""}</div>`)
+        .polygonLabel((d) => {
+          const sub = subdivCountryName(d);
+          return `<div style="font-family:Noto Sans SC,sans-serif">${escapeHtml(displayName(d))}${sub ? " · " + escapeHtml(sub) : ""}</div>`;
+        })
         .onPolygonHover((d) => {
           state.hoverId = d ? keyOf(d) : null;
           globe.polygonAltitude(globe.polygonAltitude());
           $("coords").textContent = d
-            ? `${displayName(d)} · ${englishName(d)}${isProvince(d) ? " · 中国省份" : ""}`
-            : "拖拽旋转 · 滚轮缩放 · 点击国家或省份可编辑";
+            ? `${displayName(d)} · ${englishName(d)}${subdivCountryName(d) ? " · " + subdivCountryName(d) : ""}`
+            : "拖拽旋转 · 滚轮缩放 · 点击国家或行政区可编辑";
         })
         .onPolygonClick((d) => {
           if (state.mode === "pin") return;
@@ -582,11 +838,11 @@
         .join("path")
         .attr("d", path)
         .attr("data-id", (d) => keyOf(d))
-        .attr("stroke-width", (d) => isProvince(d) ? 0.7 : 0.4)
+        .attr("stroke-width", (d) => isSubdiv(d) ? 0.7 : 0.4)
         .on("mouseenter", (event, d) => {
           $("tooltip").style.display = "block";
           $("tooltip").textContent = displayName(d);
-          $("coords").textContent = `${displayName(d)} · ${englishName(d)}${isProvince(d) ? " · 中国省份" : ""}`;
+          $("coords").textContent = `${displayName(d)} · ${englishName(d)}${subdivCountryName(d) ? " · " + subdivCountryName(d) : ""}`;
         })
         .on("mousemove", (event) => {
           $("tooltip").style.left = event.offsetX + "px";
@@ -718,24 +974,30 @@
       $("countryList").innerHTML = countryRows.map((x) => `
         <button type="button" data-id="${x.id}" class="${x.id === state.selectedId ? "active" : ""}">
           <span class="swatch" style="background:${isChinaWorld(x.f) ? "#c23b22" : fillColor(x.f)}"></span>${escapeHtml(x.name)}
-          <br><small>${escapeHtml(isChinaWorld(x.f) ? "含省级行政区" : x.en)}</small>
+          <br><small>${escapeHtml(subdivLabel(x.f))}</small>
         </button>
       `).join("");
       $("countryList").querySelectorAll("button").forEach((btn) => {
         btn.addEventListener("click", () => selectCountry(btn.dataset.id, true));
       });
-      const provinceRows = state.provinces
+      const ef = expandedCountry();
+      const subdivs = ef ? (isChinaWorld(ef) ? state.provinces : regionsOf(ef)) : [];
+      const regionRows = subdivs
         .map((f) => ({ f, id: keyOf(f), name: displayName(f), en: englishName(f) }))
         .filter((x) => !q || x.name.toLowerCase().includes(q) || x.en.toLowerCase().includes(q))
         .sort((a, b) => a.name.localeCompare(b.name, "zh"));
-      $("provinceHint").textContent = `${state.provinces.length} 个省级行政区` + (q ? ` · 筛选 ${provinceRows.length}` : "");
-      $("provinceList").innerHTML = provinceRows.map((x) => `
+      $("regionTitle").textContent = ef ? `· ${escapeHtml(displayName(ef))}${isChinaWorld(ef) ? " 省份" : " 行政区"}` : "";
+      $("collapseBtn").hidden = !ef;
+      $("regionHint").textContent = ef
+        ? `${subdivs.length} 个行政区` + (q ? ` · 筛选 ${regionRows.length}` : "")
+        : "点击国家或地图上的国家，展开其行政区。";
+      $("regionList").innerHTML = regionRows.map((x) => `
         <button type="button" data-id="${x.id}" class="${x.id === state.selectedId ? "active" : ""}">
           <span class="swatch" style="background:${fillColor(x.f)}"></span>${escapeHtml(x.name)}
           <br><small>${escapeHtml(x.en)}</small>
         </button>
       `).join("");
-      $("provinceList").querySelectorAll("button").forEach((btn) => {
+      $("regionList").querySelectorAll("button").forEach((btn) => {
         btn.addEventListener("click", () => selectCountry(btn.dataset.id, true));
       });
       $("markerList").innerHTML = state.edits.markers.length
@@ -770,7 +1032,7 @@
       } else {
         $("editHint").textContent = state.mode === "pin"
           ? "点击地球或平面地图上的任意位置，放下一个标记。"
-          : "点击地球上的国家或中国省份，或左侧列表，开始上色和改名。";
+          : "点击地球上的国家或行政区，或左侧列表，开始上色和改名。";
       }
     }
 
@@ -778,13 +1040,40 @@
       if (state.globe) state.globe.pointOfView({ lat, lng, altitude }, 900);
     }
 
+    function flyAltitudeFor(f) {
+      const s = d3.geoArea(f);
+      return Math.max(0.75, Math.min(2.2, Math.sqrt(s) * 5.4));
+    }
+
     function selectCountry(id, fly) {
       const f = findCountry(id);
-      if (f && isChinaWorld(f)) {
-        state.selectedId = null;
+      if (f && isSubdiv(f)) {
+        state.selectedId = id;
         state.selectedMarkerId = null;
-        $("coords").textContent = "中国 · 已展开省级行政区";
-        if (fly && state.view === "globe") flyTo(35.8, 104.2, 1.28);
+        if (fly && state.view === "globe") {
+          const c = centroid(f);
+          flyTo(c.lat, c.lng, 1.12);
+        }
+        refreshAll();
+        return;
+      }
+      if (f && (isChinaWorld(f) || regionsOf(f).length)) {
+        if (state.expandedKey === keyOf(f)) {
+          state.expandedKey = null;
+          state.selectedId = null;
+          state.selectedMarkerId = null;
+          $("coords").textContent = "已收起行政区，恢复国家轮廓";
+        } else {
+          state.expandedKey = keyOf(f);
+          state.selectedId = null;
+          state.selectedMarkerId = null;
+          const n = isChinaWorld(f) ? state.provinces.length : regionsOf(f).length;
+          $("coords").textContent = `${displayName(f)} · 已展开 ${n} 个行政区`;
+          if (fly && state.view === "globe") {
+            const c = centroid(f);
+            flyTo(c.lat, c.lng, isChinaWorld(f) ? 1.28 : flyAltitudeFor(f));
+          }
+        }
         refreshAll();
         return;
       }
@@ -792,7 +1081,7 @@
       state.selectedMarkerId = null;
       if (f && fly && state.view === "globe") {
         const c = centroid(f);
-        flyTo(c.lat, c.lng, isProvince(f) ? 1.12 : 1.65);
+        flyTo(c.lat, c.lng, 1.65);
       }
       refreshAll();
     }
@@ -832,7 +1121,7 @@
       state.mode = mode;
       $("modeSelect").classList.toggle("active", mode === "select");
       $("modePin").classList.toggle("active", mode === "pin");
-      $("coords").textContent = mode === "pin" ? "点击地图放置标记" : "拖拽旋转 · 滚轮缩放 · 点击国家或省份可编辑";
+      $("coords").textContent = mode === "pin" ? "点击地图放置标记" : "拖拽旋转 · 滚轮缩放 · 点击国家或行政区可编辑";
       renderEditor();
     }
 
@@ -908,6 +1197,12 @@
     });
     $("viewGlobe").addEventListener("click", () => setView("globe"));
     $("viewFlat").addEventListener("click", () => setView("flat"));
+    $("collapseBtn").addEventListener("click", () => {
+      state.expandedKey = null;
+      state.selectedId = null;
+      state.selectedMarkerId = null;
+      refreshAll();
+    });
     $("modeSelect").addEventListener("click", () => setMode("select"));
     $("modePin").addEventListener("click", () => setMode("pin"));
     $("toggleSpin").addEventListener("click", () => {
@@ -981,6 +1276,14 @@
           state.provinces = [];
           $("error").textContent = "中国省份数据加载失败：" + (err.message || err);
         }
+        try {
+          state.regions = await loadWorldStates();
+        } catch (err) {
+          state.regions = [];
+          $("error").textContent = "全球行政区数据加载失败：" + (err.message || err);
+        }
+        const chinaF = state.countries.find((f) => isChinaWorld(f));
+        state.expandedKey = chinaF ? keyOf(chinaF) : null;
         setupGlobe();
         setupFlat();
         setMode("select");
